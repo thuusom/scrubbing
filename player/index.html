@@ -1,0 +1,103 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8"/>
+  <title>Shaka + Akamai BBB (image tracks)</title>
+  <meta name="viewport" content="width=device-width, initial-scale=1"/>
+  <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/shaka-player@4.15.9/dist/controls.css">
+  <!-- IMPORTANT: use defer so Shaka loads before our inline script runs -->
+  <script defer src="https://cdn.jsdelivr.net/npm/shaka-player@4.15.9/dist/shaka-player.ui.min.js"></script>
+  <style>
+    body { margin:0; background:#111; color:#ddd; font-family:system-ui,sans-serif; }
+    .wrap { max-width:960px; margin:20px auto; padding:0 12px; }
+    #video { width:100%; background:#000; }
+    .shaka-controls-container { opacity:1 !important; }
+    #player { position:relative; }
+  </style>
+</head>
+<body>
+<div class="wrap">
+  <h2>Shaka + Akamai BBB (DASH image tracks)</h2>
+  <div id="player" data-shaka-player-container>
+    <video id="video" data-shaka-player playsinline muted autoplay controls></video>
+  </div>
+</div>
+
+<script>
+(async () => {
+  // Wait until the Shaka library has actually loaded
+  if (!window.shaka) {
+    await new Promise((resolve) => {
+      const chk = () => window.shaka ? resolve() : setTimeout(chk, 10);
+      chk();
+    });
+  }
+
+  // Install polyfills & set logging AFTER shaka is present
+  if (shaka.polyfill && typeof shaka.polyfill.installAll === 'function') {
+    shaka.polyfill.installAll();
+  }
+  if (shaka.log && typeof shaka.log.setLevel === 'function' && shaka.log.Level) {
+    shaka.log.setLevel(shaka.log.Level.DEBUG);
+  }
+
+  // Serve content from local nginx (web service)
+  const CONTENT_BASE = 'http://localhost:8080';
+  const NAME = 'video';
+  const MPD = `${CONTENT_BASE}/${NAME}/stream.mpd`;
+  const VTT = `${CONTENT_BASE}/${NAME}/thumbs/thumbs.vtt`;
+
+  const video  = document.getElementById('video');
+  const root   = document.getElementById('player');
+
+  // Create player (without media element), attach, then create UI overlay
+  const player = new shaka.Player();
+  await player.attach(video);
+  let ui = null;
+  if (shaka.ui && shaka.ui.Overlay) {
+    ui = new shaka.ui.Overlay(player, root, video);
+  }
+
+  // Basic config
+  player.configure({
+    streaming: { lowLatencyMode: false },
+    manifest:  { retryParameters: { maxAttempts: 2 } },
+    drm:       { servers: {} }
+  });
+
+  // Verbose error logging
+  player.addEventListener('error', e => console.error('[shaka][player]', e.detail || e));
+  if (ui && ui.getControls) ui.getControls().addEventListener('error', e => console.error('[shaka][ui]', e.detail || e));
+  video.addEventListener('error', () => console.error('[video]', video.error));
+
+  try {
+    await player.load(MPD);
+    console.log('[shaka] MPD loaded');
+
+    // Use WebVTT thumbnails via Shaka's built-in support.
+    // Our generator writes VTT under /video/thumbs/thumbs.vtt with entries 'thumbs/xxx.jpg'.
+    // Rewrite those entries to be relative to the VTT directory (remove the leading 'thumbs/').
+    try {
+      const vttText = await (await fetch(VTT)).text();
+      const baseDir = VTT.slice(0, VTT.lastIndexOf('/') + 1); // .../video/thumbs/
+      const fixed = vttText
+        .split(/\r?\n/)
+        .map(line => line.trim().startsWith('thumbs/') ? (baseDir + line.trim().slice('thumbs/'.length)) : line)
+        .join('\n');
+      const blob = new Blob([fixed], { type: 'text/vtt' });
+      const vttUrl = URL.createObjectURL(blob);
+      await player.addThumbnailsTrack(vttUrl);
+      console.log('[shaka] thumbnails track added');
+      // Revoke later to free memory
+      setTimeout(() => URL.revokeObjectURL(vttUrl), 30000);
+    } catch (err) {
+      console.warn('[shaka] failed to add thumbnails track:', err);
+    }
+  } catch (e) {
+    console.error('[shaka] load failed:', e);
+    alert('Load failed. See console.');
+  }
+})();
+</script>
+</body>
+</html>
