@@ -5,6 +5,8 @@ IN=/input
 OUT=/output
 THUMB_EVERY_SEC="${THUMB_EVERY_SEC:-2}"
 THUMB_WIDTH="${THUMB_WIDTH:-320}"
+SPRITES_COLUMNS="${SPRITES_COLUMNS:-10}"
+SPRITES_ROWS="${SPRITES_ROWS:-10}"
 
 # printf hh:mm:ss.mmm from seconds (integer)
 fmt_hhmmss () {
@@ -201,6 +203,60 @@ process_file() {
       start=$end
     done
   } > "$vtt"
+
+  # -----------------------------
+  # 3b) Sprite sheets (tiled)
+  # -----------------------------
+  # Build multiple sprite images with fixed grid size (columns x rows)
+  # and generate a corresponding VTT referencing subregions
+  local sprite_dir="$dest/thumbs/sprites"
+  rm -rf "$sprite_dir" && mkdir -p "$sprite_dir"
+  local cols="$SPRITES_COLUMNS" rows="$SPRITES_ROWS"
+  local tile="${cols}x${rows}"
+  local sprite_idx=0
+  local idx=1
+  local cell_w="$t_width" cell_h="$t_height"
+  local per_sprite=$(( cols * rows ))
+  local total="$count"
+  while [[ $idx -le $total ]]; do
+    sprite_idx=$(( sprite_idx + 1 ))
+    # Collect up to per_sprite images
+    local list=()
+    local j=0
+    while [[ $j -lt $per_sprite && $idx -le $total ]]; do
+      list+=("$dest/thumbs/thumb-${idx}.jpg")
+      idx=$(( idx + 1 ))
+      j=$(( j + 1 ))
+    done
+    montage "${list[@]}" -tile "$tile" -geometry "+0+0" -background none "$sprite_dir/sprite-${sprite_idx}.jpg"
+  done
+
+  # Sprite-based VTT
+  local svtt="$dest/thumbs/thumbs_sprites.vtt"
+  {
+    echo "WEBVTT"
+    echo ""
+    local t=0
+    local n=1
+    local s=1
+    while [[ $n -le $total ]]; do
+      local sprite=$(( ((n-1)/per_sprite) + 1 ))
+      local k=$(( (n-1) % per_sprite ))
+      local r=$(( k / cols ))
+      local c=$(( k % cols ))
+      local x=$(( c * cell_w ))
+      local y=$(( r * cell_h ))
+      local t_end=$(( t + THUMB_EVERY_SEC ))
+      echo "$n"
+      echo "$(fmt_hhmmss $t) --> $(fmt_hhmmss $t_end)"
+      echo "thumbs/sprites/sprite-${sprite}.jpg#xywh=${x},${y},${cell_w},${cell_h}"
+      echo ""
+      t=$t_end
+      n=$(( n + 1 ))
+    done
+  } > "$svtt"
+
+  # Optional: also write an image-track-like HLS image playlist for sprites (not standard); skipping
 
   # -----------------------------
   # 4) DASH Image AdaptationSet (standard)
