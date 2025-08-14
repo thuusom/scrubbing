@@ -6,7 +6,7 @@ OUT=/output
 THUMB_EVERY_SEC="${THUMB_EVERY_SEC:-2}"
 THUMB_WIDTH="${THUMB_WIDTH:-320}"
 SPRITES_COLUMNS="${SPRITES_COLUMNS:-10}"
-SPRITES_ROWS="${SPRITES_ROWS:-10}"
+SPRITES_ROWS="${SPRITES_ROWS:-1}"
 
 # printf hh:mm:ss.mmm from seconds (integer)
 fmt_hhmmss () {
@@ -76,7 +76,7 @@ inject_dash_tile_image_set () {
   local tmp_as
   tmp_as="$(mktemp)"
   local per_sprite=$(( cols * rows ))
-  local seg_dur=$dur
+  local seg_dur=$(( per_sprite * dur ))
   cat >"$tmp_as" <<EOF
   <AdaptationSet mimeType="image/jpeg" contentType="image">
     <SegmentTemplate media="\$RepresentationID\$/tile_\$Number\$.jpg" timescale="1" duration="${seg_dur}" startNumber="1"/>
@@ -315,18 +315,12 @@ process_file() {
   local rep_id="thumbnails_${t_width}x${t_height}"
   local rep_dir="$dash_dir/$rep_id"
   rm -rf "$rep_dir" && mkdir -p "$rep_dir"
-  # Map time slots to tile images; create tile_1..tile_count, repeating sprite sheets as needed
-  local per_sprite=$(( SPRITES_COLUMNS * SPRITES_ROWS ))
-  local k=1
-  while [[ $k -le $count ]]; do
-    local sheet_index=$(( ((k-1)/per_sprite) + 1 ))
-    local sheet_path="$sprites_dir/sprite-${sheet_index}.jpg"
-    if [[ ! -f "$sheet_path" ]]; then
-      # Fallback to first sprite if missing
-      sheet_path="$sprites_dir/sprite-1.jpg"
-    fi
-    cp -f "$sheet_path" "$rep_dir/tile_${k}.jpg"
-    k=$(( k + 1 ))
+  # Create one tile per sprite sheet
+  local sidx=1
+  for sheet_path in "$sprites_dir"/sprite-*.jpg; do
+    [ -e "$sheet_path" ] || break
+    cp -f "$sheet_path" "$rep_dir/tile_${sidx}.jpg"
+    sidx=$(( sidx + 1 ))
   done
   inject_dash_tile_image_set "$dash_dir/stream.mpd" "$SPRITES_COLUMNS" "$SPRITES_ROWS" "$t_width" "$t_height" "$THUMB_EVERY_SEC"
 
