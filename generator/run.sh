@@ -96,10 +96,11 @@ write_hls_video () {
   mkdir -p "$dest/hls"
 
   ffmpeg -y -hide_banner -loglevel error -i "$src" \
-    -map 0:v:0 -map 0:a? \
+    -map 0:v:0 -map 0:a\? \
     -c:v libx264 -preset veryfast -profile:v main \
     -g 48 -keyint_min 48 -sc_threshold 0 \
     -c:a aac -b:a 128k -ac 2 \
+    -f hls \
     -hls_time 4 -hls_playlist_type vod \
     -hls_segment_filename "$dest/hls/chunk-%05d.ts" \
     "$dest/hls/stream.m3u8"

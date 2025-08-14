@@ -27,8 +27,10 @@
     <div style="margin:8px 0">
       <label>Source:
         <select id="source">
-          <option value="local">Local (localhost)</option>
-          <option value="akamai">Akamai demo</option>
+          <option value="local-vtt">Local (MPD + VTT thumbnails)</option>
+          <option value="local-dash">Local (DASH stream + image thumbnails)</option>
+          <option value="local-hls">Local (HLS stream + image thumbnails)</option>
+          <option value="akamai-dash">Remote Akamai (DASH stream + image thumbnails)</option>
         </select>
       </label>
     </div>
@@ -60,7 +62,9 @@
   const NAME = 'video';
   const AKAMAI_MPD = 'https://dash.akamaized.net/akamai/bbb_30fps/bbb_with_tiled_thumbnails.mpd';
   const params = new URLSearchParams(location.search);
-  const initialSource = ((params.get('src') || 'local').toLowerCase() === 'akamai') ? 'akamai' : 'local';
+  const allowed = new Set(['local-vtt','local-dash','local-hls','akamai-dash']);
+  const qs = (params.get('src') || 'local-vtt').toLowerCase();
+  const initialSource = allowed.has(qs) ? qs : 'local-vtt';
 
   const video  = document.getElementById('video');
   const root   = document.getElementById('player');
@@ -88,25 +92,32 @@
   video.addEventListener('error', () => console.error('[video]', video.error));
 
   function getSourceConfig(source) {
-    if (source === 'akamai') return { mpd: AKAMAI_MPD, vtt: null };
-    return {
-      mpd: `${CONTENT_BASE}/${NAME}/stream.mpd`,
-      vtt: `${CONTENT_BASE}/${NAME}/thumbs/thumbs.vtt`
-    };
+    switch (source) {
+      case 'akamai-dash':
+        return { url: AKAMAI_MPD, addVtt: false };
+      case 'local-dash':
+        return { url: `${CONTENT_BASE}/${NAME}/stream.mpd`, addVtt: false };
+      case 'local-hls':
+        return { url: `${CONTENT_BASE}/${NAME}/hls/master.m3u8`, addVtt: false };
+      case 'local-vtt':
+      default:
+        return { url: `${CONTENT_BASE}/${NAME}/stream.mpd`, addVtt: `${CONTENT_BASE}/${NAME}/thumbs/thumbs.vtt` };
+    }
   }
 
   async function loadSource(source) {
-    const { mpd, vtt } = getSourceConfig(source);
+    const { url, addVtt } = getSourceConfig(source);
     try {
       await player.unload();
-      await player.load(mpd);
-      console.log('[shaka] MPD loaded:', source);
+      await player.load(url);
+      console.log('[shaka] Loaded:', source, url);
 
-      if (vtt) {
+      if (addVtt) {
         // Use WebVTT thumbnails via Shaka's built-in support for local content
         try {
-          const vttText = await (await fetch(vtt)).text();
-          const baseDir = vtt.slice(0, vtt.lastIndexOf('/') + 1); // .../video/thumbs/
+          const vttUrlAbs = addVtt;
+          const vttText = await (await fetch(vttUrlAbs)).text();
+          const baseDir = vttUrlAbs.slice(0, vttUrlAbs.lastIndexOf('/') + 1); // .../video/thumbs/
           const fixed = vttText
             .split(/\r?\n/)
             .map(line => line.trim().startsWith('thumbs/') ? (baseDir + line.trim().slice('thumbs/'.length)) : line)
@@ -120,7 +131,7 @@
           console.warn('[shaka] failed to add thumbnails track (VTT):', err);
         }
       } else {
-        // Akamai stream has DASH image tracks; Shaka UI should show thumbnails automatically
+        // Rely on DASH/HLS image tracks; Shaka UI should show thumbnails automatically
         const imageTracks = (player.getImageTracks && player.getImageTracks()) || [];
         console.log('[shaka] image tracks detected:', imageTracks.length);
       }
@@ -137,7 +148,7 @@
   sourceSel.addEventListener('change', () => {
     const sel = sourceSel.value;
     const url = new URL(location.href);
-    if (sel === 'akamai') url.searchParams.set('src', 'akamai'); else url.searchParams.delete('src');
+    url.searchParams.set('src', sel);
     history.replaceState(null, '', url.toString());
     loadSource(sel);
   });
