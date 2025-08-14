@@ -97,11 +97,14 @@
       case 'akamai-dash':
         return { url: AKAMAI_MPD, addVtt: false };
       case 'local-dash-sprites':
+        // Use DASH without image tracks and add VTT sprites
         return { url: `${CONTENT_BASE}/${NAME}/dash/stream.mpd`, addVtt: `${CONTENT_BASE}/${NAME}/sprites/thumbs_sprites.vtt` };
       case 'local-dash-tiles':
-        return { url: `${CONTENT_BASE}/${NAME}/dash/stream.mpd`, addVtt: false };
+        // Use DASH variant that includes tiled image track in the MPD
+        return { url: `${CONTENT_BASE}/${NAME}/dash/stream_tiles.mpd`, addVtt: false };
       case 'local-hls-sprites':
-        return { url: `${CONTENT_BASE}/${NAME}/hls/master.m3u8`, addVtt: `${CONTENT_BASE}/${NAME}/sprites/thumbs_sprites.vtt` };
+        // Use HLS without images-only reference in master and add VTT sprites
+        return { url: `${CONTENT_BASE}/${NAME}/hls/stream.m3u8`, addVtt: `${CONTENT_BASE}/${NAME}/sprites/thumbs_sprites.vtt` };
       case 'local-hls-thumbs':
         return { url: `${CONTENT_BASE}/${NAME}/hls/master.m3u8`, addVtt: false };
       default:

@@ -176,6 +176,15 @@ write_hls_video () {
     echo "stream.m3u8"
     echo "#EXT-X-IMAGE-STREAM-INF:BANDWIDTH=25000,RESOLUTION=${v_width}x${v_height},CODECS=\"jpeg\",URI=\"../thumbs/thumbs.m3u8\""
   } > "$dest/hls/master.m3u8"
+
+  # Also provide a master without image playlist for the VTT-sprites option
+  {
+    echo "#EXTM3U"
+    echo "#EXT-X-VERSION:7"
+    echo "#EXT-X-INDEPENDENT-SEGMENTS"
+    echo "#EXT-X-STREAM-INF:BANDWIDTH=${bw},RESOLUTION=${v_width}x${v_height},CODECS=\"${codecs}\""
+    echo "stream.m3u8"
+  } > "$dest/hls/master_noimg.m3u8"
 }
 
 process_file() {
@@ -216,6 +225,8 @@ process_file() {
     || { echo "[generator] DASH encode failed for $src"; return 1; }
 
   [ -f "$dash_dir/stream.mpd" ] || return 1
+  # Create a copy for tiles variant (base stream.mpd remains without image tracks)
+  cp -f "$dash_dir/stream.mpd" "$dash_dir/stream_tiles.mpd"
 
   # -----------------------------
   # 2) Thumbnails (JPEG) — unpadded numbering to match MPD $Number$
@@ -310,7 +321,7 @@ process_file() {
     done
   } > "$svtt"
 
-  # 4) DASH Tiled Thumbnails AdaptationSet (sprites in AdaptationSet)
+  # 4) DASH Tiled Thumbnails AdaptationSet (sprites in AdaptationSet) — inject into stream_tiles.mpd only
   # Copy sprite sheets into the DASH directory structure expected by SegmentTemplate
   local rep_id="thumbnails_${t_width}x${t_height}"
   local rep_dir="$dash_dir/$rep_id"
@@ -322,9 +333,9 @@ process_file() {
     cp -f "$sheet_path" "$rep_dir/tile_${sidx}.jpg"
     sidx=$(( sidx + 1 ))
   done
-  inject_dash_tile_image_set "$dash_dir/stream.mpd" "$SPRITES_COLUMNS" "$SPRITES_ROWS" "$t_width" "$t_height" "$THUMB_EVERY_SEC"
+  inject_dash_tile_image_set "$dash_dir/stream_tiles.mpd" "$SPRITES_COLUMNS" "$SPRITES_ROWS" "$t_width" "$t_height" "$THUMB_EVERY_SEC"
 
-  # 5) HLS Image Media Playlist (standard)
+  # 5) HLS Image Media Playlist (standard) — keep for image-thumbnails option
   write_hls_image_playlists "$dest" "$count" "$t_width" "$t_height" "$THUMB_EVERY_SEC"
 
   # -----------------------------
