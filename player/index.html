@@ -11,6 +11,12 @@
     body { margin:0; background:#111; color:#ddd; font-family:system-ui,sans-serif; }
     .wrap { max-width:960px; margin:20px auto; padding:0 12px; }
     #video { width:100%; background:#000; }
+    /* Hide native HTML5 controls completely so only Shaka UI shows */
+    video::-webkit-media-controls { display:none !important; }
+    video::-webkit-media-controls-enclosure { display:none !important; }
+    video::-webkit-media-controls-panel { display:none !important; }
+    video::-moz-media-controls { display:none !important; }
+    video::-ms-media-controls { display:none !important; }
     .shaka-controls-container { opacity:1 !important; }
     #player { position:relative; }
   </style>
@@ -19,7 +25,7 @@
 <div class="wrap">
   <h2>Shaka + Akamai BBB (DASH image tracks)</h2>
   <div id="player" data-shaka-player-container>
-    <video id="video" data-shaka-player playsinline muted autoplay controls></video>
+    <video id="video" data-shaka-player playsinline muted autoplay></video>
   </div>
 </div>
 
