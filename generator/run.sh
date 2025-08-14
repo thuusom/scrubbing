@@ -24,7 +24,9 @@ inject_dash_image_set () {
   tmp_as="$(mktemp)"
   cat >"$tmp_as" <<EOF
   <AdaptationSet id="201" contentType="image" mimeType="image/jpeg" segmentAlignment="true">
-    <Representation id="img-1" bandwidth="5000" width="$width" height="$height">
+    <Role schemeIdUri="urn:mpeg:dash:role:2011" value="trickmode"/>
+    <Representation id="img-1" bandwidth="5000" width="$width" height="$height" codecs="jpeg">
+      <EssentialProperty schemeIdUri="http://dashif.org/guidelines/trickmode" value="1"/>
       <SegmentTemplate timescale="1" duration="$dur" startNumber="1" media="$rel_path"/>
     </Representation>
   </AdaptationSet>
