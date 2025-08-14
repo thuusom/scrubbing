@@ -13,13 +13,11 @@ This project demonstrates a local video processing and streaming workflow with t
   - Outputs to `media/output/<name>/`
   - Produces:
     - DASH with CMAF segments: `stream.mpd`, `init-video-*.mp4`, `chunk-video-*-00001.m4s`, ...
-    - Injected DASH image track into MPD referencing `thumbs/thumb-$Number$.jpg`
     - HLS VOD (TS): `hls/stream.m3u8`, `hls/chunk-00000.ts`, `hls/master.m3u8`
-    - Thumbnails:
-      - Individual JPEGs: `thumbs/thumb-1.jpg` ...
-      - WebVTT (file-per-thumb): `thumbs/thumbs.vtt`
-      - Sprite sheet(s): `thumbs/sprites/sprite-1.jpg` (+ optional more)
+    - Thumbnails (sprites-only):
+      - Sprite sheet(s): `thumbs/sprites/sprite-*.jpg`
       - Sprite VTT with `#xywh`: `thumbs/thumbs_sprites.vtt`
+    - Note: Individual thumbnails (`thumb-*.jpg`) and DASH/HLS image-track playlists are no longer kept
   - Tunables via environment:
     - `THUMB_EVERY_SEC` (default 2), `THUMB_WIDTH` (default 320)
     - `SPRITES_COLUMNS` (default 10), `SPRITES_ROWS` (default 10)
@@ -32,11 +30,11 @@ This project demonstrates a local video processing and streaming workflow with t
 - player
   - Accessible on port 8081
   - Dropdown switches between:
-    1. Local (MPD + VTT thumbnails)
-    2. Local (DASH stream + image thumbnails)
-    3. Local (HLS stream + image thumbnails)
+    1. Local (MPD + sprite thumbnails)
+    2. Local (DASH stream + sprite thumbnails)
+    3. Local (HLS stream + sprite thumbnails)
     4. Remote Akamai (DASH stream + image thumbnails)
-  - For consistent previews (incl. Safari), local options also add the sprite-based VTT
+  - For consistent previews (incl. Safari), all local options add the sprite-based VTT
 
 ### Getting started
 
@@ -78,6 +76,24 @@ docker compose down
   - NGINX serves a single-page Shaka UI player
   - JS loads Shaka, initializes, and switches sources based on dropdown/URL
   - Uses sprite-based VTT for local modes to ensure reliable thumbnails across browsers
+
+#### Local dropdown sources: file mapping
+
+- Local (MPD + sprite thumbnails)
+  - Manifest: `/video/stream.mpd`
+  - Segments: `/video/init-video-*.mp4`, `/video/chunk-video-*-*.m4s`
+  - Thumbnails: `/video/thumbs/thumbs_sprites.vtt` → `/video/thumbs/sprites/sprite-*.jpg`
+
+- Local (DASH stream + sprite thumbnails)
+  - Manifest: `/video/stream.mpd`
+  - Segments: `/video/init-video-*.mp4`, `/video/chunk-video-*-*.m4s`
+  - Thumbnails: `/video/thumbs/thumbs_sprites.vtt` → `/video/thumbs/sprites/sprite-*.jpg`
+
+- Local (HLS stream + sprite thumbnails)
+  - Master: `/video/hls/master.m3u8`
+  - Variant: `/video/hls/stream.m3u8`
+  - Segments: `/video/hls/chunk-*.ts`
+  - Thumbnails: `/video/thumbs/thumbs_sprites.vtt` → `/video/thumbs/sprites/sprite-*.jpg`
 
 ### TODO / Improvements
 

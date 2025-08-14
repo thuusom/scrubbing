@@ -96,12 +96,13 @@
       case 'akamai-dash':
         return { url: AKAMAI_MPD, addVtt: false };
       case 'local-dash':
-        // We will also add sprite VTT for consistency so Safari shows thumbs
+        // Always add sprite VTT for consistent thumbnails
         return { url: `${CONTENT_BASE}/${NAME}/stream.mpd`, addVtt: `${CONTENT_BASE}/${NAME}/thumbs/thumbs_sprites.vtt` };
       case 'local-hls':
         return { url: `${CONTENT_BASE}/${NAME}/hls/master.m3u8`, addVtt: `${CONTENT_BASE}/${NAME}/thumbs/thumbs_sprites.vtt` };
       case 'local-vtt':
       default:
+        // Use sprites VTT
         return { url: `${CONTENT_BASE}/${NAME}/stream.mpd`, addVtt: `${CONTENT_BASE}/${NAME}/thumbs/thumbs_sprites.vtt` };
     }
   }
@@ -132,7 +133,6 @@
           console.warn('[shaka] failed to add thumbnails track (VTT):', err);
         }
       } else {
-        // Rely on DASH/HLS image tracks; Shaka UI should show thumbnails automatically
         const imageTracks = (player.getImageTracks && player.getImageTracks()) || [];
         console.log('[shaka] image tracks detected:', imageTracks.length);
       }

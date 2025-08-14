@@ -122,7 +122,6 @@ write_hls_video () {
     echo "#EXT-X-INDEPENDENT-SEGMENTS"
     echo "#EXT-X-STREAM-INF:BANDWIDTH=${bw},RESOLUTION=${v_width}x${v_height},CODECS=\"${codecs}\""
     echo "stream.m3u8"
-    echo "#EXT-X-IMAGE-STREAM-INF:BANDWIDTH=25000,RESOLUTION=${v_width}x${v_height},CODECS=\"jpeg\",URI=\"../thumbs/thumbs.m3u8\""
   } > "$dest/hls/master.m3u8"
 }
 
@@ -184,25 +183,7 @@ process_file() {
   t_width=$(echo "$dim" | cut -d, -f1)
   t_height=$(echo "$dim" | cut -d, -f2)
 
-  # -----------------------------
-  # 3) WebVTT (fallback)
-  # -----------------------------
-  local vtt="$dest/thumbs/thumbs.vtt"
-  {
-    echo "WEBVTT"
-    echo ""
-    local idx=1
-    local start=0
-    while [[ $idx -le $count ]]; do
-      local end=$(( start + THUMB_EVERY_SEC ))
-      echo "$idx"
-      echo "$(fmt_hhmmss $start) --> $(fmt_hhmmss $end)"
-      echo "thumbs/thumb-${idx}.jpg"
-      echo ""
-      idx=$(( idx + 1 ))
-      start=$end
-    done
-  } > "$vtt"
+  # (Removed) Individual-image WebVTT — sprites will be used instead
 
   # -----------------------------
   # 3b) Sprite sheets (tiled)
@@ -258,25 +239,20 @@ process_file() {
 
   # Optional: also write an image-track-like HLS image playlist for sprites (not standard); skipping
 
-  # -----------------------------
-  # 4) DASH Image AdaptationSet (standard)
-  # -----------------------------
-  inject_dash_image_set \
-    "$dest/stream.mpd" \
-    "thumbs/thumb-\$Number\$.jpg" \
-    "$t_width" \
-    "$t_height" \
-    "$THUMB_EVERY_SEC"
+  # (Removed) Skip injecting DASH image track since individual JPEGs will be deleted
 
-  # -----------------------------
-  # 5) HLS Image Media Playlist (standard)
-  # -----------------------------
-  write_hls_image_playlists "$dest" "$count" "$t_width" "$t_height" "$THUMB_EVERY_SEC"
+  # (Removed) Skip creating HLS image playlist since individual JPEGs will be deleted
 
   # -----------------------------
   # 6) HLS VIDEO stream (+ master that references image playlist)
   # -----------------------------
   write_hls_video "$src" "$dest" "$v_width" "$v_height"
+
+  # Cleanup: remove individual thumbnails and legacy thumb playlists after sprites are created
+  rm -f "$dest/thumbs/"thumb-*.jpg \
+        "$dest/thumbs/thumbs.vtt" \
+        "$dest/thumbs/thumbs.m3u8" \
+        "$dest/thumbs/thumbs_master.m3u8" || true
 
   echo "[generator] Done: $name  (DASH video + DASH image track + VTT + HLS image playlists + HLS video)"
 }
