@@ -11,13 +11,16 @@ This project demonstrates a local video processing and streaming workflow with t
 - generator
   - Watches `media/input/` for new video files (mp4/mkv/mov)
   - Outputs to `media/output/<name>/`
-  - Produces:
-    - DASH with CMAF segments: `stream.mpd`, `init-video-*.mp4`, `chunk-video-*-00001.m4s`, ...
-    - HLS VOD (TS): `hls/stream.m3u8`, `hls/chunk-00000.ts`, `hls/master.m3u8`
-    - Thumbnails (sprites-only):
-      - Sprite sheet(s): `thumbs/sprites/sprite-*.jpg`
-      - Sprite VTT with `#xywh`: `thumbs/thumbs_sprites.vtt`
-    - Note: Individual thumbnails (`thumb-*.jpg`) and DASH/HLS image-track playlists are no longer kept
+  - Produces (structured):
+    - DASH: `dash/stream.mpd`, `dash/init-video-*.mp4`, `dash/chunk-video-*-*.m4s`
+    - HLS: `hls/master.m3u8`, `hls/stream.m3u8`, `hls/chunk-*.ts`
+    - Thumbnails:
+      - Individual JPEGs: `thumbs/thumb-*.jpg`
+      - Individual-image VTT: `thumbs/thumbs.vtt` (standard sidecar)
+      - Sprites: `sprites/sprite-*.jpg` and `sprites/thumbs_sprites.vtt` (#xywh)
+    - Manifests reference image tracks where standards allow:
+      - DASH image AdaptationSet in `dash/stream.mpd` → `../thumbs/thumb-$Number$.jpg`
+      - HLS images-only playlist `thumbs/thumbs.m3u8` + master `thumbs/thumbs_master.m3u8`
   - Tunables via environment:
     - `THUMB_EVERY_SEC` (default 2), `THUMB_WIDTH` (default 320)
     - `SPRITES_COLUMNS` (default 10), `SPRITES_ROWS` (default 10)
@@ -30,11 +33,12 @@ This project demonstrates a local video processing and streaming workflow with t
 - player
   - Accessible on port 8081
   - Dropdown switches between:
-    1. Local (MPD + sprite thumbnails)
-    2. Local (DASH stream + sprite thumbnails)
-    3. Local (HLS stream + sprite thumbnails)
-    4. Remote Akamai (DASH stream + image thumbnails)
-  - For consistent previews (incl. Safari), all local options add the sprite-based VTT
+    1. Local (DASH + VTT sprites)
+    2. Local (DASH + spriteset in AdaptationSet)
+    3. Local (HLS + VTT sprites)
+    4. Local (HLS + image thumbnails)
+    5. Remote Akamai (DASH + image thumbnails)
+  - Local sprites options add the sprite-based VTT; image-thumbnails/tiles rely on in-manifest image tracks
 
 ### Getting started
 
@@ -79,21 +83,40 @@ docker compose down
 
 #### Local dropdown sources: file mapping
 
-- Local (MPD + sprite thumbnails)
-  - Manifest: `/video/stream.mpd`
-  - Segments: `/video/init-video-*.mp4`, `/video/chunk-video-*-*.m4s`
-  - Thumbnails: `/video/thumbs/thumbs_sprites.vtt` → `/video/thumbs/sprites/sprite-*.jpg`
+- Local (DASH + VTT sprites)
+  - Manifest: `/video/dash/stream.mpd`
+  - Segments: `/video/dash/init-video-*.mp4`, `/video/dash/chunk-video-*-*.m4s`
+  - Thumbnails: `/video/sprites/thumbs_sprites.vtt` → `/video/sprites/sprite-*.jpg`
 
-- Local (DASH stream + sprite thumbnails)
-  - Manifest: `/video/stream.mpd`
-  - Segments: `/video/init-video-*.mp4`, `/video/chunk-video-*-*.m4s`
-  - Thumbnails: `/video/thumbs/thumbs_sprites.vtt` → `/video/thumbs/sprites/sprite-*.jpg`
+- Local (DASH + spriteset in AdaptationSet)
+  - Manifest: `/video/dash/stream.mpd` (includes tiled thumbnail AdaptationSet)
+  - Segments: `/video/dash/init-video-*.mp4`, `/video/dash/chunk-video-*-*.m4s`
+  - Thumbnails: in-MPD tiled image track → `/video/dash/thumbnails_<w>x<h>/tile_$Number$.jpg`
 
-- Local (HLS stream + sprite thumbnails)
+- Local (HLS + VTT sprites)
   - Master: `/video/hls/master.m3u8`
   - Variant: `/video/hls/stream.m3u8`
   - Segments: `/video/hls/chunk-*.ts`
-  - Thumbnails: `/video/thumbs/thumbs_sprites.vtt` → `/video/thumbs/sprites/sprite-*.jpg`
+  - Thumbnails: `/video/sprites/thumbs_sprites.vtt` → `/video/sprites/sprite-*.jpg`
+
+- Local (HLS + image thumbnails)
+  - Master: `/video/hls/master.m3u8` (references images-only playlist)
+  - Variant: `/video/hls/stream.m3u8`
+  - Segments: `/video/hls/chunk-*.ts`
+  - Thumbnails: images-only playlist `/video/thumbs/thumbs.m3u8` (via `#EXT-X-IMAGE-STREAM-INF`)
+
+### Standards vs custom
+
+- DASH image thumbnails: MPD image AdaptationSet with `mimeType="image/jpeg"` and `SegmentTemplate` (standard). No standard for tiled sprites in MPD.
+- HLS image thumbnails: `#EXT-X-IMAGE-STREAM-INF` in master pointing to an images-only playlist with `#EXT-X-IMAGES-ONLY` (standard). No standard for tiled sprites in M3U8.
+- VTT sprites: WebVTT sidecar using `#xywh` fragments to reference regions within sprite sheets (custom for players/UIs that support it; used by Shaka).
+
+References: MPEG-DASH ISO/IEC 23009-1, DASH-IF trick mode guidelines, Apple HLS RFC 8216, Shaka Player docs.
+
+### Native players
+
+- ExoPlayer (Android): supports in-manifest image tracks (DASH/HLS). VTT sprites require custom UI integration.
+- AVPlayer (Apple): supports HLS image playlists natively. VTT sprites require custom UI integration.
 
 ### TODO / Improvements
 

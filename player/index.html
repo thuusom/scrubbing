@@ -27,9 +27,10 @@
     <div style="margin:8px 0">
       <label>Source:
         <select id="source">
-          <option value="local-vtt">Local (MPD + VTT thumbnails)</option>
-          <option value="local-dash">Local (DASH stream + image thumbnails)</option>
-          <option value="local-hls">Local (HLS stream + image thumbnails)</option>
+          <option value="local-dash-sprites">Local (DASH + VTT sprites)</option>
+          <option value="local-dash-tiles">Local (DASH + spriteset in AdaptationSet)</option>
+          <option value="local-hls-sprites">Local (HLS + VTT sprites)</option>
+          <option value="local-hls-thumbs">Local (HLS + image thumbnails)</option>
           <option value="akamai-dash">Remote Akamai (DASH stream + image thumbnails)</option>
         </select>
       </label>
@@ -62,9 +63,9 @@
   const NAME = 'video';
   const AKAMAI_MPD = 'https://dash.akamaized.net/akamai/bbb_30fps/bbb_with_tiled_thumbnails.mpd';
   const params = new URLSearchParams(location.search);
-  const allowed = new Set(['local-vtt','local-dash','local-hls','akamai-dash']);
-  const qs = (params.get('src') || 'local-vtt').toLowerCase();
-  const initialSource = allowed.has(qs) ? qs : 'local-vtt';
+  const allowed = new Set(['local-dash-sprites','local-dash-tiles','local-hls-sprites','local-hls-thumbs','akamai-dash']);
+  const qs = (params.get('src') || 'local-dash-sprites').toLowerCase();
+  const initialSource = allowed.has(qs) ? qs : 'local-dash-sprites';
 
   const video  = document.getElementById('video');
   const root   = document.getElementById('player');
@@ -95,15 +96,16 @@
     switch (source) {
       case 'akamai-dash':
         return { url: AKAMAI_MPD, addVtt: false };
-      case 'local-dash':
-        // Always add sprite VTT for consistent thumbnails
-        return { url: `${CONTENT_BASE}/${NAME}/stream.mpd`, addVtt: `${CONTENT_BASE}/${NAME}/thumbs/thumbs_sprites.vtt` };
-      case 'local-hls':
-        return { url: `${CONTENT_BASE}/${NAME}/hls/master.m3u8`, addVtt: `${CONTENT_BASE}/${NAME}/thumbs/thumbs_sprites.vtt` };
-      case 'local-vtt':
+      case 'local-dash-sprites':
+        return { url: `${CONTENT_BASE}/${NAME}/dash/stream.mpd`, addVtt: `${CONTENT_BASE}/${NAME}/sprites/thumbs_sprites.vtt` };
+      case 'local-dash-tiles':
+        return { url: `${CONTENT_BASE}/${NAME}/dash/stream.mpd`, addVtt: false };
+      case 'local-hls-sprites':
+        return { url: `${CONTENT_BASE}/${NAME}/hls/master.m3u8`, addVtt: `${CONTENT_BASE}/${NAME}/sprites/thumbs_sprites.vtt` };
+      case 'local-hls-thumbs':
+        return { url: `${CONTENT_BASE}/${NAME}/hls/master.m3u8`, addVtt: false };
       default:
-        // Use sprites VTT
-        return { url: `${CONTENT_BASE}/${NAME}/stream.mpd`, addVtt: `${CONTENT_BASE}/${NAME}/thumbs/thumbs_sprites.vtt` };
+        return { url: `${CONTENT_BASE}/${NAME}/dash/stream.mpd`, addVtt: `${CONTENT_BASE}/${NAME}/sprites/thumbs_sprites.vtt` };
     }
   }
 
@@ -119,10 +121,10 @@
         try {
           const vttUrlAbs = addVtt;
           const vttText = await (await fetch(vttUrlAbs)).text();
-          const baseDir = vttUrlAbs.slice(0, vttUrlAbs.lastIndexOf('/') + 1); // .../video/thumbs/
+          const baseDir = vttUrlAbs.slice(0, vttUrlAbs.lastIndexOf('/') + 1); // .../video/sprites/
           const fixed = vttText
             .split(/\r?\n/)
-            .map(line => line.trim().startsWith('thumbs/') ? (baseDir + line.trim().slice('thumbs/'.length)) : line)
+            .map(line => (/^sprite-\d+\.jpg#xywh=/.test(line.trim()) ? (baseDir + line.trim()) : line))
             .join('\n');
           const blob = new Blob([fixed], { type: 'text/vtt' });
           const vttUrl = URL.createObjectURL(blob);
