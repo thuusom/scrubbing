@@ -24,6 +24,14 @@
 <body>
 <div class="wrap">
   <h2>Shaka + Akamai BBB (DASH image tracks)</h2>
+    <div style="margin:8px 0">
+      <label>Source:
+        <select id="source">
+          <option value="local">Local (localhost)</option>
+          <option value="akamai">Akamai demo</option>
+        </select>
+      </label>
+    </div>
   <div id="player" data-shaka-player-container>
     <video id="video" data-shaka-player playsinline muted autoplay></video>
   </div>
@@ -47,14 +55,17 @@
     shaka.log.setLevel(shaka.log.Level.DEBUG);
   }
 
-  // Serve content from local nginx (web service)
+  // Serve content from local nginx (web service) or Akamai demo
   const CONTENT_BASE = 'http://localhost:8080';
   const NAME = 'video';
-  const MPD = `${CONTENT_BASE}/${NAME}/stream.mpd`;
-  const VTT = `${CONTENT_BASE}/${NAME}/thumbs/thumbs.vtt`;
+  const AKAMAI_MPD = 'https://dash.akamaized.net/akamai/bbb_30fps/bbb_with_tiled_thumbnails.mpd';
+  const params = new URLSearchParams(location.search);
+  const initialSource = ((params.get('src') || 'local').toLowerCase() === 'akamai') ? 'akamai' : 'local';
 
   const video  = document.getElementById('video');
   const root   = document.getElementById('player');
+  const sourceSel = document.getElementById('source');
+  sourceSel.value = initialSource;
 
   // Create player (without media element), attach, then create UI overlay
   const player = new shaka.Player();
@@ -76,33 +87,60 @@
   if (ui && ui.getControls) ui.getControls().addEventListener('error', e => console.error('[shaka][ui]', e.detail || e));
   video.addEventListener('error', () => console.error('[video]', video.error));
 
-  try {
-    await player.load(MPD);
-    console.log('[shaka] MPD loaded');
-
-    // Use WebVTT thumbnails via Shaka's built-in support.
-    // Our generator writes VTT under /video/thumbs/thumbs.vtt with entries 'thumbs/xxx.jpg'.
-    // Rewrite those entries to be relative to the VTT directory (remove the leading 'thumbs/').
-    try {
-      const vttText = await (await fetch(VTT)).text();
-      const baseDir = VTT.slice(0, VTT.lastIndexOf('/') + 1); // .../video/thumbs/
-      const fixed = vttText
-        .split(/\r?\n/)
-        .map(line => line.trim().startsWith('thumbs/') ? (baseDir + line.trim().slice('thumbs/'.length)) : line)
-        .join('\n');
-      const blob = new Blob([fixed], { type: 'text/vtt' });
-      const vttUrl = URL.createObjectURL(blob);
-      await player.addThumbnailsTrack(vttUrl);
-      console.log('[shaka] thumbnails track added');
-      // Revoke later to free memory
-      setTimeout(() => URL.revokeObjectURL(vttUrl), 30000);
-    } catch (err) {
-      console.warn('[shaka] failed to add thumbnails track:', err);
-    }
-  } catch (e) {
-    console.error('[shaka] load failed:', e);
-    alert('Load failed. See console.');
+  function getSourceConfig(source) {
+    if (source === 'akamai') return { mpd: AKAMAI_MPD, vtt: null };
+    return {
+      mpd: `${CONTENT_BASE}/${NAME}/stream.mpd`,
+      vtt: `${CONTENT_BASE}/${NAME}/thumbs/thumbs.vtt`
+    };
   }
+
+  async function loadSource(source) {
+    const { mpd, vtt } = getSourceConfig(source);
+    try {
+      await player.unload();
+      await player.load(mpd);
+      console.log('[shaka] MPD loaded:', source);
+
+      if (vtt) {
+        // Use WebVTT thumbnails via Shaka's built-in support for local content
+        try {
+          const vttText = await (await fetch(vtt)).text();
+          const baseDir = vtt.slice(0, vtt.lastIndexOf('/') + 1); // .../video/thumbs/
+          const fixed = vttText
+            .split(/\r?\n/)
+            .map(line => line.trim().startsWith('thumbs/') ? (baseDir + line.trim().slice('thumbs/'.length)) : line)
+            .join('\n');
+          const blob = new Blob([fixed], { type: 'text/vtt' });
+          const vttUrl = URL.createObjectURL(blob);
+          await player.addThumbnailsTrack(vttUrl);
+          console.log('[shaka] thumbnails track added (VTT)');
+          setTimeout(() => URL.revokeObjectURL(vttUrl), 30000);
+        } catch (err) {
+          console.warn('[shaka] failed to add thumbnails track (VTT):', err);
+        }
+      } else {
+        // Akamai stream has DASH image tracks; Shaka UI should show thumbnails automatically
+        const imageTracks = (player.getImageTracks && player.getImageTracks()) || [];
+        console.log('[shaka] image tracks detected:', imageTracks.length);
+      }
+    } catch (e) {
+      console.error('[shaka] load failed:', e);
+      alert('Load failed. See console.');
+    }
+  }
+
+  // Initial load based on URL param
+  await loadSource(initialSource);
+
+  // Handle user switching
+  sourceSel.addEventListener('change', () => {
+    const sel = sourceSel.value;
+    const url = new URL(location.href);
+    if (sel === 'akamai') url.searchParams.set('src', 'akamai'); else url.searchParams.delete('src');
+    history.replaceState(null, '', url.toString());
+    loadSource(sel);
+  });
 })();
 </script>
 </body>
