@@ -79,7 +79,7 @@ inject_dash_tile_image_set () {
   local seg_dur=$(( per_sprite * dur ))
   cat >"$tmp_as" <<EOF
   <AdaptationSet mimeType="image/jpeg" contentType="image">
-    <SegmentTemplate media="\$RepresentationID\$/tile_\$Number\$.jpg" timescale="1" duration="${seg_dur}" startNumber="1"/>
+    <SegmentTemplate media="../sprites/sprite-\$Number\$.jpg" timescale="1" duration="${seg_dur}" startNumber="1"/>
     <Representation bandwidth="12288" id="${rep_id}" width="${sheet_w}" height="${sheet_h}">
       <EssentialProperty schemeIdUri="http://dashif.org/thumbnail_tile" value="${cols}x${rows}"/>
     </Representation>
@@ -322,17 +322,8 @@ process_file() {
   } > "$svtt"
 
   # 4) DASH Tiled Thumbnails AdaptationSet (sprites in AdaptationSet) — inject into stream_tiles.mpd only
-  # Copy sprite sheets into the DASH directory structure expected by SegmentTemplate
+  # No copying needed; we reference the sprites directly via ../sprites/sprite-$Number$.jpg
   local rep_id="thumbnails_${t_width}x${t_height}"
-  local rep_dir="$dash_dir/$rep_id"
-  rm -rf "$rep_dir" && mkdir -p "$rep_dir"
-  # Create one tile per sprite sheet
-  local sidx=1
-  for sheet_path in "$sprites_dir"/sprite-*.jpg; do
-    [ -e "$sheet_path" ] || break
-    cp -f "$sheet_path" "$rep_dir/tile_${sidx}.jpg"
-    sidx=$(( sidx + 1 ))
-  done
   inject_dash_tile_image_set "$dash_dir/stream_tiles.mpd" "$SPRITES_COLUMNS" "$SPRITES_ROWS" "$t_width" "$t_height" "$THUMB_EVERY_SEC"
 
   # 5) HLS Image Media Playlist (standard) — keep for image-thumbnails option
