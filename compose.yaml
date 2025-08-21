@@ -17,7 +17,7 @@ services:
       - ./media/output:/usr/share/nginx/html:ro
       - ./streamer/nginx.conf:/etc/nginx/conf.d/default.conf:ro
     ports:
-      - "8080:80"
+      - "8081:80"
     restart: unless-stopped
 
   player:
@@ -30,5 +30,5 @@ services:
       # Points at the streamer service inside the compose network
       - CONTENT_BASE=http://streamer:80
     ports:
-      - "8081:80"
+      - "8080:80"
     restart: unless-stopped

@@ -59,7 +59,7 @@
   }
 
   // Serve content from local nginx (web service) or Akamai demo
-  const CONTENT_BASE = 'http://localhost:8080';
+  const CONTENT_BASE = `http://${location.hostname}:8081`;
   const NAME = 'video';
   const AKAMAI_MPD = 'https://dash.akamaized.net/akamai/bbb_30fps/bbb_with_tiled_thumbnails.mpd';
   const params = new URLSearchParams(location.search);
