@@ -19,6 +19,72 @@
     video::-ms-media-controls { display:none !important; }
     .shaka-controls-container { opacity:1 !important; }
     #player { position:relative; }
+    
+    /* Gallery styles */
+    .gallery-container {
+      position: absolute;
+      bottom: 80px;
+      left: 50%;
+      transform: translateX(-50%);
+      background: rgba(0, 0, 0, 0.9);
+      border-radius: 8px;
+      padding: 20px;
+      display: none;
+      z-index: 1000;
+      min-width: 600px;
+    }
+    
+    .gallery-container.visible {
+      display: block;
+    }
+    
+    .gallery-thumbnails {
+      display: flex;
+      gap: 8px;
+      align-items: center;
+      transition: transform 0.3s ease;
+    }
+    
+    .gallery-thumbnail {
+      width: 120px;
+      height: 67px;
+      object-fit: cover;
+      border-radius: 4px;
+      cursor: pointer;
+      border: 2px solid transparent;
+      transition: border-color 0.2s ease;
+    }
+    
+    .gallery-thumbnail.focused {
+      border-color: #e50914;
+      transform: scale(1.05);
+    }
+    
+    .gallery-time {
+      position: absolute;
+      bottom: -30px;
+      left: 50%;
+      transform: translateX(-50%);
+      background: rgba(0, 0, 0, 0.8);
+      color: white;
+      padding: 4px 8px;
+      border-radius: 4px;
+      font-size: 12px;
+      white-space: nowrap;
+    }
+    
+    .gallery-instructions {
+      position: absolute;
+      top: -40px;
+      left: 50%;
+      transform: translateX(-50%);
+      color: white;
+      font-size: 14px;
+      text-align: center;
+      background: rgba(0, 0, 0, 0.8);
+      padding: 8px 16px;
+      border-radius: 4px;
+    }
   </style>
 </head>
 <body>
@@ -29,6 +95,7 @@
         <select id="source">
           <option value="local-dash-sprites">Local (DASH + VTT sprites)</option>
           <option value="local-dash-tiles">Local (DASH + spriteset in AdaptationSet)</option>
+          <option value="local-dash-gallery">Local (DASH Gallery)</option>
           <option value="local-hls-sprites">Local (HLS + VTT sprites)</option>
           <option value="local-hls-thumbs">Local (HLS + image thumbnails)</option>
           <option value="akamai-dash">Remote Akamai (DASH stream + image thumbnails)</option>
@@ -37,6 +104,11 @@
     </div>
   <div id="player" data-shaka-player-container>
     <video id="video" data-shaka-player playsinline muted autoplay></video>
+    <div id="gallery" class="gallery-container">
+      <div class="gallery-instructions">Press SPACE to pause/show gallery • Use ← → to navigate • Press ENTER to jump to time</div>
+      <div class="gallery-thumbnails" id="galleryThumbnails"></div>
+      <div class="gallery-time" id="galleryTime"></div>
+    </div>
   </div>
 </div>
 
@@ -63,14 +135,23 @@
   const NAME = 'video';
   const AKAMAI_MPD = 'https://dash.akamaized.net/akamai/bbb_30fps/bbb_with_tiled_thumbnails.mpd';
   const params = new URLSearchParams(location.search);
-  const allowed = new Set(['local-dash-sprites','local-dash-tiles','local-hls-sprites','local-hls-thumbs','akamai-dash']);
+  const allowed = new Set(['local-dash-sprites','local-dash-tiles','local-dash-gallery','local-hls-sprites','local-hls-thumbs','akamai-dash']);
   const qs = (params.get('src') || 'local-dash-sprites').toLowerCase();
   const initialSource = allowed.has(qs) ? qs : 'local-dash-sprites';
 
   const video  = document.getElementById('video');
   const root   = document.getElementById('player');
   const sourceSel = document.getElementById('source');
+  const gallery = document.getElementById('gallery');
+  const galleryThumbnails = document.getElementById('galleryThumbnails');
+  const galleryTime = document.getElementById('galleryTime');
   sourceSel.value = initialSource;
+
+  // Gallery state
+  let galleryMode = false;
+  let currentThumbnailIndex = 0;
+  let thumbnails = [];
+  let thumbnailTimes = [];
 
   // Create player (without media element), attach, then create UI overlay
   const player = new shaka.Player();
@@ -92,6 +173,131 @@
   if (ui && ui.getControls) ui.getControls().addEventListener('error', e => console.error('[shaka][ui]', e.detail || e));
   video.addEventListener('error', () => console.error('[video]', video.error));
 
+  // Gallery functions
+  function formatTime(seconds) {
+    const mins = Math.floor(seconds / 60);
+    const secs = Math.floor(seconds % 60);
+    return `${mins}:${secs.toString().padStart(2, '0')}`;
+  }
+
+  function showGallery() {
+    if (!galleryMode) return;
+    
+    gallery.classList.add('visible');
+    updateGalleryFocus();
+  }
+
+  function hideGallery() {
+    gallery.classList.remove('visible');
+  }
+
+  function updateGalleryFocus() {
+    // Remove focus from all thumbnails
+    document.querySelectorAll('.gallery-thumbnail').forEach(thumb => {
+      thumb.classList.remove('focused');
+    });
+    
+    // Add focus to current thumbnail
+    const currentThumb = document.querySelectorAll('.gallery-thumbnail')[currentThumbnailIndex];
+    if (currentThumb) {
+      currentThumb.classList.add('focused');
+      
+      // Center the focused thumbnail
+      const container = galleryThumbnails;
+      const thumbWidth = 120 + 8; // thumbnail width + gap
+      const containerWidth = container.offsetWidth;
+      const scrollPosition = (currentThumbnailIndex * thumbWidth) - (containerWidth / 2) + (thumbWidth / 2);
+      container.style.transform = `translateX(-${Math.max(0, scrollPosition)}px)`;
+      
+      // Update time display
+      const time = thumbnailTimes[currentThumbnailIndex] || 0;
+      galleryTime.textContent = formatTime(time);
+    }
+  }
+
+  function navigateGallery(direction) {
+    if (!galleryMode) return;
+    
+    const newIndex = currentThumbnailIndex + direction;
+    if (newIndex >= 0 && newIndex < thumbnails.length) {
+      currentThumbnailIndex = newIndex;
+      updateGalleryFocus();
+    }
+  }
+
+  function jumpToTime() {
+    if (!galleryMode) return;
+    
+    const time = thumbnailTimes[currentThumbnailIndex] || 0;
+    video.currentTime = time;
+    hideGallery();
+    video.play();
+  }
+
+  function createGalleryThumbnails() {
+    galleryThumbnails.innerHTML = '';
+    thumbnails = [];
+    thumbnailTimes = [];
+    
+    // Create thumbnails from the available thumb images
+    const totalThumbs = 7; // Number of thumbnail images available
+    const videoDuration = video.duration || 60; // Fallback duration
+    
+    for (let i = 0; i < totalThumbs; i++) {
+      const time = (videoDuration / totalThumbs) * i;
+      const thumbIndex = Math.min(i + 1, totalThumbs); // thumb-1.jpg to thumb-7.jpg
+      
+      const thumbImg = document.createElement('img');
+      thumbImg.src = `${CONTENT_BASE}/${NAME}/thumbs/thumb-${thumbIndex}.jpg`;
+      thumbImg.className = 'gallery-thumbnail';
+      thumbImg.alt = `Thumbnail at ${formatTime(time)}`;
+      
+      thumbImg.addEventListener('click', () => {
+        currentThumbnailIndex = i;
+        jumpToTime();
+      });
+      
+      galleryThumbnails.appendChild(thumbImg);
+      thumbnails.push(thumbImg);
+      thumbnailTimes.push(time);
+    }
+  }
+
+  // Keyboard event handling
+  document.addEventListener('keydown', (e) => {
+    if (!galleryMode) return;
+    
+    switch (e.code) {
+      case 'Space':
+        e.preventDefault();
+        if (video.paused) {
+          video.play();
+          hideGallery();
+        } else {
+          video.pause();
+          showGallery();
+        }
+        break;
+      case 'ArrowLeft':
+        e.preventDefault();
+        navigateGallery(-1);
+        break;
+      case 'ArrowRight':
+        e.preventDefault();
+        navigateGallery(1);
+        break;
+      case 'Enter':
+        e.preventDefault();
+        jumpToTime();
+        break;
+      case 'Escape':
+        e.preventDefault();
+        hideGallery();
+        video.play();
+        break;
+    }
+  });
+
   function getSourceConfig(source) {
     switch (source) {
       case 'akamai-dash':
@@ -102,6 +308,9 @@
       case 'local-dash-tiles':
         // Use DASH variant that includes tiled image track in the MPD
         return { url: `${CONTENT_BASE}/${NAME}/dash/stream_tiles.mpd`, addVtt: false };
+      case 'local-dash-gallery':
+        // Use DASH for gallery mode
+        return { url: `${CONTENT_BASE}/${NAME}/dash/stream.mpd`, addVtt: false, gallery: true };
       case 'local-hls-sprites':
         // Use HLS without images-only reference in master and add VTT sprites
         return { url: `${CONTENT_BASE}/${NAME}/hls/stream.m3u8`, addVtt: `${CONTENT_BASE}/${NAME}/sprites/thumbs_sprites.vtt` };
@@ -113,11 +322,42 @@
   }
 
   async function loadSource(source) {
-    const { url, addVtt } = getSourceConfig(source);
+    const { url, addVtt, gallery: isGallery } = getSourceConfig(source);
+    
+    // Reset gallery state
+    galleryMode = false;
+    currentThumbnailIndex = 0;
+    hideGallery();
+    
     try {
       await player.unload();
       await player.load(url);
       console.log('[shaka] Loaded:', source, url);
+
+      if (isGallery) {
+        // Enable gallery mode
+        galleryMode = true;
+        
+        // Wait for video metadata to load
+        if (video.readyState < 1) {
+          await new Promise(resolve => {
+            video.addEventListener('loadedmetadata', resolve, { once: true });
+          });
+        }
+        
+        // Create gallery thumbnails
+        createGalleryThumbnails();
+        
+        // Add pause event listener for gallery
+        video.addEventListener('pause', showGallery);
+        video.addEventListener('play', hideGallery);
+        
+        console.log('[shaka] Gallery mode enabled');
+      } else {
+        // Remove gallery event listeners
+        video.removeEventListener('pause', showGallery);
+        video.removeEventListener('play', hideGallery);
+      }
 
       if (addVtt) {
         // Use WebVTT thumbnails via Shaka's built-in support for local content
