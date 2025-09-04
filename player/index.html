@@ -2,7 +2,7 @@
 <html lang="en">
 <head>
   <meta charset="utf-8"/>
-  <title>Shaka + Akamai BBB (image tracks)</title>
+  <title>4 Shaka + Akamai BBB (image tracks)</title>
   <meta name="viewport" content="width=device-width, initial-scale=1"/>
   <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/shaka-player@4.15.9/dist/controls.css">
   <!-- IMPORTANT: use defer so Shaka loads before our inline script runs -->
@@ -24,14 +24,15 @@
     .gallery-container {
       position: absolute;
       bottom: 80px;
-      left: 50%;
-      transform: translateX(-50%);
+      left: 0;
+      right: 0;
       background: rgba(0, 0, 0, 0.9);
       border-radius: 8px;
       padding: 20px;
       display: none;
       z-index: 1000;
-      min-width: 600px;
+      overflow: hidden;
+      margin: 0 20px;
     }
     
     .gallery-container.visible {
@@ -214,6 +215,7 @@
       galleryTime.textContent = formatTime(time);
     }
   }
+
 
   function navigateGallery(direction) {
     if (!galleryMode) return;
